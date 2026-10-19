@@ -15,16 +15,16 @@ Promise.all(['data/communities.json','data/meta.json','data/districts.geojson','
   initUI();initMap();scoreAll();route();Pages.init(D,S);
   window.addEventListener('hashchange',route);
 });
-function ctx(){return {weights:S.weights,ageRule:S.ageRule,districts:D.meta.districts}}
+function ctx(){return {weights:S.weights,ageRule:S.ageRule,districts:D.meta.districts,budget:S.budget}}
 function scoreAll(){
-  scored=D.communities.map(c=>{const r=Score.total(c,ctx());const area=c.price?S.budget*1e4/c.price:null;return Object.assign({},c,{_t:r.total,_s:r.s,_why:r.why,_area:area})});
+  scored=D.communities.map(c=>{const r=Score.total(c,ctx());const area=Units.area(c,S.budget);return Object.assign({},c,{_t:r.total,_s:r.s,_why:r.why,_area:area})});
   scored.sort((a,b)=>(b._t??-1)-(a._t??-1));scored.forEach((c,i)=>c._rank=i+1);
   renderMarkers();renderList();updateCount();
   if(S.selected)openCommunity(S.selected,false);
   if(window.Pages&&Pages.ready)Pages.renderRec();
 }
-function pass(c){return S.dists.has(c.districtId)&&(c.year==null||c.year>=S.minYear)&&(c._area==null||c._area>=S.minArea)&&((c.metro?.walk??0)<=S.maxWalk)&&(!S.recOnly||c.rec)}
-function updateCount(){const n=scored.filter(pass).length;$('#f-count').textContent=`当前显示 ${n} / ${scored.length} 个小区（${S.budget}万预算下面积≥${S.minArea}㎡）`}
+function pass(c){const tt=Units.tier(c,S.budget);return S.dists.has(c.districtId)&&(c.year==null||c.year>=S.minYear)&&(tt.status==='tbd'||(c._area!=null&&c._area>=S.minArea))&&((c.metro?.walk??0)<=S.maxWalk)&&(!S.recOnly||c.rec)}
+function updateCount(){const n=scored.filter(pass).length;$('#f-count').textContent=`当前显示 ${n} / ${scored.length} 个小区（${S.budget}万预算内能买到≥${S.minArea}㎡的2房及以上；户型待补的也显示）`}
 // ---------- UI ----------
 function initUI(){
   $('#datainfo').innerHTML=`数据更新：${D.built}　小区 ${D.communities.length} 个<br>价格为挂牌参考价，非成交价，仅供参考`;
@@ -78,7 +78,7 @@ function renderMarkers(){if(!map)return;if(layers.comm)map.removeLayer(layers.co
   scored.filter(pass).forEach(c=>{if(c.lat==null)return;let m;
     if(c.rec){m=L.marker(P(c.lat,c.lng),{icon:L.divIcon({className:'',html:`<div class="star-icon">★</div>`,iconSize:[26,26],iconAnchor:[13,13]}),zIndexOffset:1000})}
     else m=L.circleMarker(P(c.lat,c.lng),{radius:7,color:'#fff',weight:1.5,fillColor:col(c._t),fillOpacity:.95});
-    m.bindTooltip(`${c.rec?'⭐':''}${c.name} ${fmt(c._t)}分<br>${fmt(c.price/1e4,2)}万/㎡ · ${c.year||'?'}年 · ${S.budget}万≈${fmt(c._area)}㎡`);
+    m.bindTooltip(`${c.rec?'⭐':''}${c.name} ${fmt(c._t)}分<br>${fmt(c.price/1e4,2)}万/㎡ · ${c.year||'?'}年 · ${S.budget}万：${Units.plain(c,S.budget)}`);
     m.on('click',()=>openCommunity(c.id));layers.comm.addLayer(m)});layers.comm.addTo(map)}
 function showPanel(html,center){$('#panel-body').innerHTML=html;$('#panel').scrollTop=0;$('#panel').classList.add('on');$('#sidebar').classList.remove('open');setTimeout(()=>{map.invalidateSize();if(center){const mob=innerWidth<=820;map.setView(center,Math.max(map.getZoom(),14),{animate:false});if(mob)map.panBy([0,innerHeight*0.25],{animate:false})}},60)}
 function openDistrict(id){const d=D.meta.districts[id];const cs=scored.filter(c=>c.districtId===id);
@@ -90,24 +90,22 @@ function openDistrict(id){const d=D.meta.districts[id];const cs=scored.filter(c=
   h+=`<div>900万可买</div><div>按区均价约 ${fmt(9e6/d.goto.price)}㎡</div></div>`;
   h+=`<p class="small">${d.note||''}</p><h3>板块概况</h3>`;
   const tp=(D.meta.plates||[]).filter(p=>p.districtId===id);
-  if(tp.length){h+=`<div class="muted">太平洋房屋挂牌样本（2026-10-19，每板块首页约20条，非成交价）</div><table><tr><th>板块</th><th>800-1000万面积中位</th><th>该价段单价中位</th><th>建成年中位</th><th>2010后占比</th></tr>`;
+  if(tp.length){h+=`<div class="muted">太平洋房屋挂牌（2026-10-19，每板块首页20条样本，非成交价）</div><table><tr><th>板块</th><th>800-1000万面积中位</th><th>该价段单价中位</th><th>建成年中位</th><th>2010后占比</th></tr>`;
     tp.forEach(p=>h+=`<tr><td>${p.plate}${p.verdict?`<br><span class="tag ${p.verdict==='推荐'?'ok':'bad'}">${p.verdict}</span>`:''}</td><td>${fmt(p.area)}㎡</td><td>${fmt(p.unit)}</td><td>${p.year||'—'}</td><td>${p.p2010==null?'—':Math.round(p.p2010*100)+'%'}</td></tr>`);h+='</table>'}
   h+=`<h3>本站收录小区（按当前得分）</h3>`;
-  Object.entries(plates).forEach(([pl,arr])=>{h+=`<div class="small" style="margin-top:6px"><b>${pl}</b>（${arr.length}个，均价中位 ${fmt(median(arr.map(c=>c.price))/1e4,2)}万）</div>`;arr.forEach(c=>h+=`<div class="small">· <a href="#map/${c.id}">${c.rec?'⭐':''}${c.name}</a> ${fmt(c._t)}分 · ${c.year||'?'}年 · ${S.budget}万≈${fmt(c._area)}㎡</div>`)});
+  Object.entries(plates).forEach(([pl,arr])=>{h+=`<div class="small" style="margin-top:6px"><b>${pl}</b>（${arr.length}个，均价中位 ${fmt(median(arr.map(c=>c.price))/1e4,2)}万）</div>`;arr.forEach(c=>h+=`<div class="small">· <a href="#map/${c.id}">${c.rec?'⭐':''}${c.name}</a> ${fmt(c._t)}分 · ${c.year||'?'}年 · ${S.budget}万：${Units.plain(c,S.budget)}</div>`)});
   showPanel(h)}
 function median(a){a=a.filter(x=>x!=null).sort((x,y)=>x-y);return a.length?a[Math.floor(a.length/2)]:null}
 function bars(c){return Object.keys(Score.DEF).map(k=>{const v=c._s[k];return `<div class="sc" title="${c._why[k]}"><span>${Score.NAMES[k]}</span><div class="bar"><i style="width:${v==null?0:v}%;background:${v==null?'#ddd':col(v)}"></i></div><b>${v==null?'待补':Math.round(v)}</b></div><div class="muted" style="margin:-2px 0 4px 98px">${c._why[k]}</div>`}).join('')}
 function openCommunity(id,fly=true){const c=scored.find(x=>x.id===id);if(!c)return;S.selected=id;
   const my50=c.year?Loan.maxYears(c.year,Score.BUY_YEAR,50):null,my70=c.year?Loan.maxYears(c.year,Score.BUY_YEAR,70):null;
-  const tiers=[800,850,900].map(b=>c.price?`${b}万≈<b>${fmt(b*1e4/c.price)}</b>㎡`:'—').join('　');
   let h=`<h2>${c.rec?'⭐ ':''}${c.name}</h2><div class="muted">${c.districtName} · ${c.plate} · ${c.address||''}${c.alias?'<br>别名：'+c.alias:''}</div>`;
   h+=`<div style="display:flex;align-items:baseline;gap:10px;margin:8px 0"><span class="score-big">${fmt(c._t)}</span><span>分（第${c._rank}/${scored.length}名）</span></div>`;
   if(c.rec)h+=`<div class="card" style="background:#fffbeb"><b>推荐理由：</b>${c.rec.reason}<br><b>主要风险：</b>${c.rec.risk}</div>`;
   h+=`<h3>价格与面积</h3><div class="kv"><div>参考均价</div><div><b>${fmt(c.price)}</b> 元/㎡（房天下${c.priceMonth||''}参考均价，挂牌口径）</div>`;
   if(c.weekPrice)h+=`<div>本周挂牌均价</div><div>${fmt(c.weekPrice)} 元/㎡</div>`;
-  h+=`<div>预算能买</div><div>${tiers}<br><span class="muted">按均价粗算，实际随楼层、户型、装修浮动±10%以上</span></div>`;
   if(c.dealRecords&&c.dealRecords.length)h+=`<div>近期成交</div><div>${c.dealRecords.map(r=>`${r.date} ${r.area}㎡ ${r.total||'价格未披露'}${r.unit?' ('+r.unit+')':''}`).join('<br>')}<br><span class="muted">房天下“市场信息”</span></div>`;
-  h+=`</div><h3>基本信息</h3><div class="kv">`;
+  h+=`</div>${Units.detail(c)}<h3>基本信息</h3><div class="kv">`;
   h+=`<div>建成年份</div><div>${TD(c.yearRaw||c.year)}</div><div>产权</div><div>${TD(c.tenure)} ${c.tenureType?`<span class="tag">${c.tenureType}</span>`:''}</div>`;
   h+=`<div>贷款年限</div><div>${c.year?`${Score.BUY_YEAR}年房龄${Score.BUY_YEAR-c.year}年：按≤50规则商贷最长<b>${my50}</b>年；按≤70规则<b>${my70}</b>年；公积金最长${Loan.gjjYears(c.year,Score.BUY_YEAR)}年`:'<span class="todo">待补</span>'}${my50!=null&&my50<40?' <span class="tag warn">40年受限</span>':''}</div>`;
   h+=`<div>环线</div><div>${TD(c.ring)}</div><div>建筑类型</div><div>${TD(c.buildType)}</div><div>容积率</div><div>${TD(c.far)}</div><div>绿化率</div><div>${c.green!=null?c.green+'%':TD(null)}</div>`;
@@ -127,9 +125,9 @@ function openCommunity(id,fly=true){const c=scored.find(x=>x.id===id);if(!c)retu
 // ---------- List ----------
 let sortKey='_t',sortDir=-1;
 function renderList(){const t=$('#list-tbl');if(!t)return;const rows=scored.filter(pass).slice().sort((a,b)=>{const x=val(a,sortKey),y=val(b,sortKey);return ((x??-1e9)>(y??-1e9)?1:(x??-1e9)<(y??-1e9)?-1:0)*sortDir});
-  const cols=[['name','小区'],['districtName','区'],['plate','板块'],['_t','总分'],['price','均价'],['_area',S.budget+'万面积'],['year','建成'],['walk','步行m'],...Object.keys(Score.DEF).map(k=>['s_'+k,Score.NAMES[k]])];
+  const cols=[['name','小区'],['districtName','区'],['plate','板块'],['_t','总分'],['price','均价'],['_area',S.budget+'万可买户型'],['year','建成'],['walk','步行m'],...Object.keys(Score.DEF).map(k=>['s_'+k,Score.NAMES[k]])];
   $('#list-info').textContent=`${rows.length} 个`;
-  t.innerHTML=`<tr>${cols.map(([k,n])=>`<th data-k="${k}">${n}${sortKey===k?(sortDir<0?'▼':'▲'):''}</th>`).join('')}</tr>`+rows.map(c=>`<tr><td><a href="#map/${c.id}">${c.rec?'⭐':''}${c.name}</a></td><td>${c.districtShort}</td><td>${c.plate}</td><td><b>${fmt(c._t)}</b></td><td>${fmt(c.price/1e4,2)}万</td><td>${fmt(c._area)}</td><td>${c.year||'待补'}</td><td>${c.metro?.walk??''}</td>${Object.keys(Score.DEF).map(k=>`<td>${c._s[k]==null?'<span class="muted">—</span>':Math.round(c._s[k])}</td>`).join('')}</tr>`).join('');
+  t.innerHTML=`<tr>${cols.map(([k,n])=>`<th data-k="${k}">${n}${sortKey===k?(sortDir<0?'▼':'▲'):''}</th>`).join('')}</tr>`+rows.map(c=>`<tr><td><a href="#map/${c.id}">${c.rec?'⭐':''}${c.name}</a></td><td>${c.districtShort}</td><td>${c.plate}</td><td><b>${fmt(c._t)}</b></td><td>${fmt(c.price/1e4,2)}万</td><td class="small">${Units.short(c,S.budget,false)}</td><td>${c.year||'待补'}</td><td>${c.metro?.walk??''}</td>${Object.keys(Score.DEF).map(k=>`<td>${c._s[k]==null?'<span class="muted">—</span>':Math.round(c._s[k])}</td>`).join('')}</tr>`).join('');
   t.querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(sortKey===k)sortDir*=-1;else{sortKey=k;sortDir=-1}renderList()})}
 function val(c,k){if(k==='walk')return c.metro?.walk;if(k.startsWith('s_'))return c._s[k.slice(2)];return c[k]}
 window.APP.scored=()=>scored;

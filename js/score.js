@@ -6,8 +6,8 @@ function lerp(x,pts){ // 分段线性：pts=[[x0,y0],[x1,y1],...] 递增
   for(let i=1;i<pts.length;i++){if(x<=pts[i][0]){const [a,ya]=pts[i-1],[b,yb]=pts[i];return ya+(yb-ya)*(x-a)/(b-a)}}
   return pts[pts.length-1][1]}
 function avg(arr){const v=arr.filter(x=>x&&x[0]!=null);if(!v.length)return null;let s=0,w=0;v.forEach(([x,ww])=>{s+=x*ww;w+=ww});return s/w}
-const DEF={value:20,age:15,commute:15,living:13,amen:10,noise:6,liq:8,supply:5,tenure:6,plan:2};
-const NAMES={value:'保值性',age:'房龄与贷款',commute:'通勤',living:'居住体验',amen:'生活配套',noise:'噪音',liq:'流动性',supply:'挂牌供给压力',tenure:'产权类型风险',plan:'周边规划'};
+const DEF={value:20,fit:10,age:15,commute:15,living:13,amen:10,noise:6,liq:8,supply:5,tenure:6,plan:2};
+const NAMES={value:'保值性',fit:'预算可买户型',age:'房龄与贷款',commute:'通勤',living:'居住体验',amen:'生活配套',noise:'噪音',liq:'流动性',supply:'挂牌供给压力',tenure:'产权类型风险',plan:'周边规划'};
 function sub(c,ctx){
   const s={},why={};const D=ctx.districts[c.districtId]||{};
   // 1 保值性：区级回撤(40%) + 环线核心度(35%) + 产品代际(25%)
@@ -18,6 +18,11 @@ function sub(c,ctx){
   const sGen=lerp(c.year,[[1990,35],[1995,45],[2000,65],[2005,80],[2010,95],[2015,100]]);
   s.value=avg([[sDD,40],[sRing,35],[sGen,25]]);
   why.value=`区回撤${dd==null?'待补':(dd*100).toFixed(0)+'%'}→${f(sDD)}；${c.ring||'环线待补'}→${f(sRing)}；${c.year||'?'}年产品→${f(sGen)}`;
+  // 1b 预算可买户型：当前预算档内真实存在的户型（挂牌优先，无挂牌按户型×均价估算）
+  {const b=ctx.budget||850;const t=(c.units&&c.units.tiers&&c.units.tiers[b])||{status:'tbd'};
+   if(t.status==='listing'||t.status==='est'){let v=t.rooms>=3?(t.area>=100?100:90):t.rooms===2?(t.area>=90?80:t.area>=80?70:t.area>=70?55:40):15;if(t.status==='est')v-=10;if(t.low)v-=5;s.fit=Math.max(0,v);why.fit=`${b}万档：${Units.plain(c,b)}`}
+   else if(t.status==='no'){s.fit=t.oneRoom?10:0;why.fit=`${b}万档买不到2房及以上${t.oneRoom?'（只有一房）':''}`}
+   else{s.fit=null;why.fit='户型待补（不参与计分）'}}
   // 2 房龄与贷款：按购房年份与房龄规则算商贷最长年限
   if(c.year){const my=Loan.maxYears(c.year,BUY_YEAR,ctx.ageRule);s.age=lerp(my,[[10,0],[20,25],[25,45],[30,65],[35,82],[40,100]]);why.age=`${BUY_YEAR}年房龄${BUY_YEAR-c.year}年，规则≤${ctx.ageRule}→商贷最长${my}年`}else{s.age=null;why.age='建成年份待补'}
   // 3 通勤：步行距离(40%) + 可达线路数(20%) + 到人民广场/陆家嘴/徐家汇平均时间(40%)
