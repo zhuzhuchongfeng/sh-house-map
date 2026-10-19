@@ -1,0 +1,6 @@
+.DS_Store
+*.zip
+.venv/
+raw/
+screenshots/
+tools/

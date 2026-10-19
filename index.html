@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="favicon.svg">
+<title>上海二手房评分地图（自用）</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css"><link rel="stylesheet" href="css/style.css">
+</head><body>
+<header><h1>🏠 上海二手房评分地图</h1>
+<nav id="nav">
+<a href="#map" data-p="map">地图</a><a href="#list" data-p="list">小区排行</a><a href="#rec" data-p="rec">推荐清单</a><a href="#decision" data-p="decision">购房决策</a><a href="#mine" data-p="mine">我的房源</a><a href="#method" data-p="method">评分方法</a><a href="#about" data-p="about">数据说明</a>
+</nav></header>
+
+<section id="page-map" class="page">
+ <aside id="sidebar">
+  <div class="muted" id="datainfo"></div>
+  <details class="sect" open><summary>预算与筛选</summary>
+   <label class="row">我的预算（总价）<select id="f-budget"><option value="800">800万</option><option value="850" selected>850万</option><option value="900">900万</option></select></label>
+   <label class="row">最小面积 <span><input type="range" id="f-area" min="40" max="140" step="5" value="75"> <b id="f-area-v">75</b>㎡</span></label>
+   <label class="row">最早建成年份 <span><input type="range" id="f-year" min="1990" max="2020" step="1" value="1995"> <b id="f-year-v">1995</b></span></label>
+   <label class="row">最近地铁步行≤ <span><input type="range" id="f-walk" min="300" max="2500" step="100" value="2500"> <b id="f-walk-v">2500</b>m</span></label>
+   <div class="small" style="margin:6px 0 2px">区：</div><div id="f-dist" class="lines-box"></div>
+   <label class="row"><span><input type="checkbox" id="f-reconly"> 只看推荐</span></label>
+   <div class="muted" id="f-count"></div>
+  </details>
+  <details class="sect" open><summary>评分权重（拖动实时重排）</summary>
+   <div id="weights"></div>
+   <div style="margin-top:6px"><button class="btn gray" id="w-reset">恢复默认</button> <span class="muted">权重自动归一到100</span></div>
+   <label class="row">房龄规则 <select id="f-agerule"><option value="50" selected>保守：房龄+贷款年限≤50</option><option value="70">宽松：≤70（按土地年限）</option></select></label>
+  </details>
+  <details class="sect" open><summary>图层</summary>
+   <label class="row">底图 <select id="basemap"><option value="amap">高德（国内快，GCJ-02）</option><option value="osm">OpenStreetMap（WGS84）</option><option value="carto">Carto 浅色（WGS84）</option></select></label>
+   <label class="row"><span><input type="checkbox" id="l-dist" checked> 区界</span><span><input type="checkbox" id="l-station" checked> 地铁站</span></label>
+   <div class="small">地铁线路：<a href="#" id="l-all">全选</a> / <a href="#" id="l-none">全不选</a></div>
+   <div id="l-lines" class="lines-box"></div>
+  </details>
+ </aside>
+ <div id="mapwrap"><div id="map"></div><button class="mob-toggle" id="mob-toggle">☰ 筛选/权重</button>
+  <div class="legend" id="legend"></div></div>
+ <div id="panel"><button class="close" id="panel-close">×</button><div id="panel-body"></div></div>
+</section>
+
+<section id="page-list" class="page"><div class="box"><h2>小区排行 <span class="muted" id="list-info"></span></h2>
+<div class="muted">按当前权重与筛选（在“地图”页侧栏调整）。点击表头排序，点击小区名在地图上查看。</div>
+<div class="tbl-wrap"><table id="list-tbl"></table></div></div></section>
+
+<section id="page-rec" class="page"><div class="box" id="rec-body"></div></section>
+<section id="page-decision" class="page"><div class="box" id="decision-body"></div></section>
+<section id="page-mine" class="page"><div class="box" id="mine-body"></div></section>
+<section id="page-method" class="page"><div class="box" id="method-body"></div></section>
+<section id="page-about" class="page"><div class="box" id="about-body"></div></section>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="js/coord.js"></script><script src="js/loan.js"></script><script src="js/score.js"></script>
+<script src="js/pages.js"></script><script src="js/app.js"></script>
+</body></html>
